@@ -2,6 +2,10 @@
 
 ⚡️ A minimal React Vite starter template.
 
+## git 提交
+
+使用`git commit --no-verify -m "commit" `可以跳过代码检查。
+
 ## Feature
 
 - ⚡️ Fast - Build tools based on vite.
