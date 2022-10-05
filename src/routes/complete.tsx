@@ -2,17 +2,16 @@ import { useEffect, useRef } from "react";
 import {
   EditorState,
   Text,
-  EditorSelection,
   Compartment,
-  StateField,
+  SelectionRange,
 } from "@codemirror/state";
 import {
   CompletionContext,
   autocompletion,
   CompletionResult,
   startCompletion,
+  Completion,
 } from "@codemirror/autocomplete";
-import { defaultHighlightStyle } from "@codemirror/language";
 import { EditorView, basicSetup } from "codemirror";
 import {
   keymap,
@@ -20,55 +19,90 @@ import {
   highlightActiveLine,
   highlightSpecialChars,
 } from "@codemirror/view";
-import {
-  defaultKeymap,
-  indentWithTab,
-  insertBlankLine,
-  deleteLine,
-} from "@codemirror/commands";
-import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { insertBlankLine, deleteLine } from "@codemirror/commands";
+import { markdown } from "@codemirror/lang-markdown";
 
 function myCompletions(context: CompletionContext): CompletionResult | null {
-  console.log(context);
-  const word = context.matchBefore(/.{2}/);
-  console.log(word);
-  if (word === null) return null;
-  if (word.from == word.to && !context.explicit) return null;
-  if (word.text.endsWith("测试")) {
+  const para = context.matchBefore(/.+/); // 本段之前的所有内容
+  let is_selection = false; // 是否有选择文本，默认不选择
+  // 得到当前选中范围:如果from<to，那说明选择了从from到to的文本,反之如果选中范围的from==to，那说明没有选择文本
+  const select_range: SelectionRange = context.state.selection.ranges[0];
+  if (select_range.from < select_range.to) {
+    is_selection = true; // 已选择文本
+    // 得到选择的文本内容
+    const select_text = context.state.doc
+      .slice(select_range.from, select_range.to)
+      .toString();
+  }
+  // 如果选中文本，那么走替换选项的填充方式
+  if (is_selection) {
     return {
-      from: word.from,
+      from: select_range.to,
       options: [
         {
-          label: `测试效果`,
+          label: `效果`,
           type: "keyword",
+          apply: (
+            view: EditorView,
+            completion: Completion,
+            from: number,
+            to: number
+          ) => {
+            view.dispatch(view.state.replaceSelection(completion.label));
+          },
+        },
+        {
+          label: `饮料`,
+          type: "keyword",
+          apply: (
+            view: EditorView,
+            completion: Completion,
+            from: number,
+            to: number
+          ) => {
+            view.dispatch(view.state.replaceSelection(completion.label));
+          },
         },
       ],
     };
   }
-  return {
-    from: word.from,
-    options: [
-      { label: "match", type: "keyword" },
-      { label: "hello", type: "variable", info: "(World)" },
-      {
-        label: "magic",
-        type: "text",
-        apply: "⠁⭒*.✩.*⭒⠁",
-        detail: "macro",
-        boost: 9,
-      },
-    ],
-  };
+  // 自动补全的文本效果，可以先对para进行分词处理，找到最后2-3组词，搜索之后得到结果
+  if (para === null) return null;
+  if (para.from == para.to && !context.explicit) return null;
+  if (para.text.endsWith("测试")) {
+    return {
+      from: para.to,
+      options: [
+        {
+          label: `效果`,
+          type: "keyword",
+        },
+        {
+          label: `饮料`,
+          type: "keyword",
+        },
+        { label: "match", type: "keyword" },
+        { label: "hello", type: "variable", info: "(World)" },
+        {
+          label: "magic",
+          type: "text",
+          apply: "⠁⭒*.✩.*⭒⠁",
+          detail: "macro",
+          boost: 9,
+        },
+      ],
+    };
+  }
+  return null;
 }
 
-const myCompletion2 = autocompletion({
+const myCompletion = autocompletion({
   activateOnTyping: true,
   override: [myCompletions],
 });
 
 export default function EditorCompletion({ onChange }) {
-  let language = new Compartment(),
-    tabSize = new Compartment();
+  const language = new Compartment();
   const editor = useRef();
 
   // 自定义快捷键
@@ -116,7 +150,7 @@ export default function EditorCompletion({ onChange }) {
         markdown(),
         onUpdate,
         language.of(markdown()),
-        myCompletion2,
+        myCompletion,
       ],
     });
 
@@ -124,10 +158,6 @@ export default function EditorCompletion({ onChange }) {
       state: state,
       parent: editor.current,
     });
-
-    console.log(state.selection.ranges.length); // 2
-    let tr = state.update(state.replaceSelection("!"));
-    console.log(tr.state.doc.toString()); // "!o!"
 
     return () => {
       view.destroy();
